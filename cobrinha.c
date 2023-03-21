@@ -25,12 +25,12 @@ typedef int bool;
 #define GAMEOVER_SCREEN 5
 
 struct place {
-  int lastDirection;
   bool food;
   bool snakeHead;
   int x; //point on screen to draw the hero
   int y;
   bool snakeBody;
+  int countMove;
 };
 
 // prototipos das funcoes
@@ -40,13 +40,19 @@ void keyboard(unsigned char key, int x, int y);
 void createfield (void);
 void destroyfield (void);
 void output(int, int, float, float, float, char *);
-bool canHeroGo (int);
+bool doCollision (int);
 int whereIsHeroC (void);
 int whereIsHeroR (void);
 void fieldGenerator (void);
 char* itoa(int, char[]);
 void doAnWay (void);
 void timeCount (int);
+void snakeMoviment (int);
+void go (int);
+void cutTail (int);
+int whereIsSnakeHeadC (void);
+int whereIsSnakeHeadR (void);
+
 //int ** field;
 struct place ** field;
 int row, column;
@@ -54,21 +60,39 @@ int snakeC, snakeR;
 int foodC, foodR;
 int windowSizeX, windowSizeY;
 int borderX, borderY;
-int steps = 0;
-bool gameover = false;
+int steps;
+bool gameover;
 long int seed;
 int screen;
 int fieldProbability;
 int survivalTime;
+int snakeSize;
+int countMove;
+int currentDirection;
+int speed;
+int speedUp;
+int foodCount;
+int lastDirection; //I use it to remember my last moviment
 
 // funcao principal
-int main(int argc, char** argv){
+int main (int argc, char** argv)
+{
+  steps = 0;
+  gameover = false;
   screen = GAME_SCREEN;
   seed = time (NULL);
   srand (seed);
 
   survivalTime = 0;
+  currentDirection = UP;
 
+  snakeSize = 10;
+  countMove = 1;
+  speed = 300;
+  speedUp = 10;
+  foodCount = 0;
+  lastDirection = UP;
+  
   row = 60;
   column = 60;
 
@@ -77,8 +101,8 @@ int main(int argc, char** argv){
   borderX = 50;
   borderY = 50;
 
-  snakeC = 0;
-  snakeR = 0;
+  snakeC = 10;
+  snakeR = 10;
 
   do {
     foodC = rand() % column;
@@ -94,7 +118,8 @@ int main(int argc, char** argv){
   init();
   glutDisplayFunc(display);                               // function to redraw using GLUT
   glutKeyboardFunc(keyboard);                             // keyboard function
-  glutTimerFunc(1000,timeCount,1);
+  glutTimerFunc(1000, timeCount, 1);
+  glutTimerFunc(speed, snakeMoviment, 1);
   glutMainLoop();                                         // show all created window
 
   return 0;
@@ -102,7 +127,7 @@ int main(int argc, char** argv){
 
 
 
-void init(void){
+void init() {
   glClearColor(1.0, 1.0, 1.0, 1.0);    // cor de fundo
   glOrtho (0, (borderX + (row * 10)), 0, (borderY + (column * 10)), -1 ,1);     // modo de projecao ortogonal
 } 
@@ -131,7 +156,7 @@ void display(void){
 
         /* Draw snakeHead */
         if (field[i][j].snakeHead == true) {
-          glPointSize (15.0);
+          glPointSize (10.0);
           glColor3f (1.0, 1.0, 0.0);
           glBegin(GL_POINTS);
             glVertex2i (field[i][j].x, field[i][j].y);
@@ -154,91 +179,65 @@ void display(void){
           glBegin(GL_POINTS);
             glVertex2i (field[i][j].x, field[i][j].y);
           glEnd();        
-        }
-  
+        }     
+      }
+    }  
 
-    char *str = "field";
+    /* Draw borders */
+    glPointSize (3.0);
+    glColor3f (0.0, 0.0, 1.0);          
+
+    for (i = 0; i < column; i++) {
+      j = 0;
+      glBegin (GL_LINES);
+        glVertex2i ((field[i][j].x - 5), field[i][j].y - 5);
+        glVertex2i ((field[i][j].x + 5), field[i][j].y - 5);           
+      glEnd ();
+    }
+    for (i = 0; i < column; i++) {
+      j = row - 1;
+      glBegin (GL_LINES);
+        glVertex2i ((field[i][j].x - 5), field[i][j].y + 5);
+        glVertex2i ((field[i][j].x + 5), field[i][j].y + 5);           
+      glEnd ();
+    }
+    for (j = 0; j < row; j++) {
+      i = 0;
+      glBegin (GL_LINES);
+        glVertex2i ((field[i][j].x - 5), field[i][j].y - 5);
+        glVertex2i ((field[i][j].x - 5), field[i][j].y + 5);           
+      glEnd ();
+    }
+    for (j = 0; j < row; j++) {
+      i = column - 1;
+      glBegin (GL_LINES);
+        glVertex2i ((field[i][j].x + 5), field[i][j].y - 5);
+        glVertex2i ((field[i][j].x + 5), field[i][j].y + 5);           
+      glEnd ();
+    }
+
+    char *str = "Poisonous Snake";
     output(300, 640, 0.0, 0.0, 0.0, str);
 
     char str4[30] = "Survival time: ";
     char str5[10];
     itoa(survivalTime, str5);
     output(400, 10, 0.0, 0.0, 0.0, strcat(str4, str5));
+
+    char str6[30] = "Food: ";
+    char str7[10];
+    itoa(foodCount, str7);
+    output(200, 10, 0.0, 0.0, 0.0, strcat(str6, str7));
+
   
-/*    if (screen == VICTORY_SCREEN) {
-      glColor3f(0.0, 0.0, 0.0);
-      glBegin(GL_POLYGON);
-        glVertex2i(250, 330);
-        glVertex2i(460, 330);
-        glVertex2i(460, 260);
-        glVertex2i(250, 260);
-      glEnd();
-      char *str3 = "CONGRATULATIONS!";
-      output(300, 310, 1.0, 1.0, 1.0, str3);
-      char str4[100] = "YOU ESCAPED WITH ";
-      char str5[10];
-      itoa (steps, str5);
-      char str6[10] = " STEPS!";
-      strcat (str4, str5);
-      strcat (str4, str6);
-      output(260, 290, 1.0, 1.0, 1.0, str4);
-      char *str7 = "PRESS ESC TO EXIT!";
-      output(300, 270, 1.0, 1.0, 1.0, str7);
-
-
-    itoa(steps, str2);
-    output(200, 10, 0.0, 0.0, 0.0, strcat(str2, " steps"));
-    }
-*/
-/*
-    if (screen == TITLE_SCREEN) {
-      glColor3f(0.0, 0.0, 0.0);
-      glBegin(GL_POLYGON);
-        glVertex2i(250, 420);
-        glVertex2i(440, 420);
-        glVertex2i(440, 260);
-        glVertex2i(250, 260);
-      glEnd();
-      char *str3 = "RUN TO THE HILL!";
-      output(260, 400, 1.0, 1.0, 1.0, str3);
-      char *str4 = "RUN FOR YOUR LIFE!";
-      output(260, 380, 1.0, 1.0, 1.0, str4);
-      char *str5 = "CHOOSE DIFFICULTY";
-      output(260, 350, 1.0, 1.0, 1.0, str5);
-      char *str6 = "PRESS 1 TO EASY MODE!";
-      output(260, 330, 1.0, 1.0, 1.0, str6);
-      char *str7 = "PRESS 2 TO NORMAL MODE!";
-      output(260, 310, 1.0, 1.0, 1.0, str7);
-      char *str8 = "PRESS 3 TO HARD MODE!";
-      output(260, 290, 1.0, 1.0, 1.0, str8);
-      char *str9 = "PRESS 4 TO GOD MODE!";
-      output(260, 270, 1.0, 1.0, 1.0, str9);
-    }    
-*/
-/*    
-    if (screen == GAMEOVER_SCREEN) {
-      glColor3f(0.0, 0.0, 0.0);
-      glBegin(GL_POLYGON);
-        glVertex2i(290, 330);
-        glVertex2i(430, 330);
-        glVertex2i(430, 280);
-        glVertex2i(290, 280);
-      glEnd();
-      char *str3 = "GAMEOVER!";
-      output(325, 310, 1.0, 1.0, 1.0, str3);
-      char *str4 = "PRESS ESC TO EXIT!";
-      output(300, 290, 1.0, 1.0, 1.0, str4);
-    }    
-*/
-
     glFlush();
 
 }
 
 bool doCollision (int direction) {
   bool collision = false;
-  int c = whereIsHeroC ();
-  int r = whereIsHeroR ();
+  int c = whereIsSnakeHeadC ();
+  int r = whereIsSnakeHeadR ();
   
   //verifica se chegou nas bordas (colisão com a parede)
   if (direction == UP && r >= row - 1)
@@ -252,21 +251,35 @@ bool doCollision (int direction) {
   
   if (collision == false) { //se não  colidiu com uma parede, então vamos ver se ele colide com o corpo dela
     //verifica se colidiu com o corpo da cobra
-    if (direction == UP && field[snakeHeadC][snakeHeadR-1].snakeBody == true)
+    if (direction == UP && field[c][r+1].snakeBody == true)
       collision = true;
-    if (direction == DOWN && field[snakeHeadC][snakeHeadR+1].snakeBody == true)
+    if (direction == DOWN && field[c][r-1].snakeBody == true)
       collision = true;
-    if (direction == LEFT && field[snakeHeadC-1][snakeHeadR].snakeBody == true)
+    if (direction == LEFT && field[c-1][r].snakeBody == true)
       collision = true;
-    if (direction == RIGHT && field[snakeHeadC+1][snakeHeadR].snakeBody == true)
+    if (direction == RIGHT && field[c+1][r].snakeBody == true)
       collision = true;
   }
+  /*
+  if (direction == UP && lastDirection == DOWN)
+    collision = false;
+  if (direction == DOWN && lastDirection == UP)
+    collision = false;
+  if (direction == LEFT && lastDirection == RIGHT)
+    collision = false;
+  if (direction == RIGHT && lastDirection == LEFT)
+    collision = false;
+*/
+  printf ("a cobra colidiu em %d = %d\n", direction, collision);
+  if (collision) {
+    printf ("Fim de jogo com %d comidas e durou %d segundos\n", foodCount, survivalTime);
+    exit(0);
+  }
 
-  printf ("a cobra colidiu em %d = %d\n", direction, can);
-  return can;
-};
+  return collision;
+}
 
-int whereIsHeroC (void) {
+int whereIsSnakeHeadC (void) {
   int i,j,c = 0;
   for (i = 0; i < row; i++)
     for (j = 0; j < column; j++)
@@ -276,7 +289,7 @@ int whereIsHeroC (void) {
   return c;
 }
 
-int whereIsHeroR (void) {
+int whereIsSnakeHeadR (void) {
   int i,j,r = 0;
   for (i = 0; i < row; i++)
     for (j = 0; j < column; j++)
@@ -288,6 +301,7 @@ int whereIsHeroR (void) {
 
 void keyboard(unsigned char key, int x, int y){
 //TODO fazer a lógica da movimentação
+/*
   if (screen == GAMEOVER_SCREEN || screen == VICTORY_SCREEN) {
     switch (key) {
     case 27:                                         // tecla Esc (encerra o programa)
@@ -296,10 +310,12 @@ void keyboard(unsigned char key, int x, int y){
       break;
     }
   }
+*/
 
    int c, r;
-   c = whereIsHeroC ();
-   r = whereIsHeroR ();
+   c = whereIsSnakeHeadC ();
+   r = whereIsSnakeHeadR ();
+  countMove++;
   if (screen == GAME_SCREEN) {
     switch (key) {
     case 27:                                         // tecla Esc (encerra o programa)
@@ -307,56 +323,29 @@ void keyboard(unsigned char key, int x, int y){
     	exit(0);
       break;
     case 'w':
-      if (canHeroGo(UP)) {
-        if (r < row) {
-          field[c][r].footprint = true;
-          field[c][r].hero = false;
-          field[c][r+1].hero = true;
-          steps++;
-        }
-      }
+      go (UP);
       break;
     case 's':
-      if (canHeroGo(DOWN)) {
-        if (r >= 0) {
-          field[c][r].footprint = true;
-          field[c][r].hero = false;
-          field[c][r-1].hero = true;
-          steps++;
-        }
-      }
+      go (DOWN);
       break;
     case 'a':
-      if (canHeroGo(LEFT)) {
-        if (c >= 0) {
-          field[c][r].footprint = true;
-          field[c][r].hero = false;
-          field[c-1][r].hero = true;
-          steps++;
-        }
-      }
+      go (LEFT);
       break;
     case 'd':
-      if (canHeroGo(RIGHT)) {
-        if (c < column) {
-          field[c][r].footprint = true;
-          field[c][r].hero = false;
-          field[c+1][r].hero = true;
-          steps++;
-        }
-      }
+      go (RIGHT);
       break;
     break;
     }
   
-    c = whereIsHeroC ();
-    r = whereIsHeroR ();
-    if (field[c][r].end == true) {
-      screen = VICTORY_SCREEN;
-      printf ("Fim de jogo com %d passos\n", steps);
-    }
+    //TODO: um contador de movimento que só permite o tamanho da cobra ser desenhado na tela.
+//    c = whereIsHeroC ();
+//    r = whereIsHeroR ();
+//    if (field[c][r].end == true) {
+//      screen = VICTORY_SCREEN;
+//      printf ("Fim de jogo com %d passos\n", steps);
+//    }
   }
-
+/*
   if (screen == TITLE_SCREEN) {
     switch (key) {
     case 27:                                         // tecla Esc (encerra o programa)
@@ -364,22 +353,22 @@ void keyboard(unsigned char key, int x, int y){
     	exit(0);
       break;
     case '1':
-      timeLeft = 100;
+      survivalTime = 100;
       break;
     case '2':
-      timeLeft = 30;
+      survivalTime = 30;
       break;
     case '3':
-      timeLeft = 20;
+      survivalTime = 20;
       break;
     case '4':
-      timeLeft = 10;
+      survivalTime = 10;
       break;
     }
     screen = GAME_SCREEN;
     glutTimerFunc(1000,timeCount,1);
   }
-
+*/
   glutPostRedisplay();
 }
 
@@ -400,103 +389,15 @@ void createfield () {
     }
   for (i = 0; i < row; i++)
     for (j = 0; j < column; j++){
-      field[i][j].up = true;
-      field[i][j].down = true;
-      field[i][j].left = true;
-      field[i][j].right = true;
-      if (startC == i && startR == j)
-        field[i][j].start = true;        
-      else
-        field[i][j].start = false;        
-      if (endC == i && endR == j)
-        field[i][j].end = true;        
-      else
-        field[i][j].end = false;        
-      if (heroC == i && heroR == j)
-        field[i][j].hero = true;        
-      else
-        field[i][j].hero = false;     
-      field[i][j].footprint = false;   
+      field[i][j].snakeHead = false;
+      field[i][j].snakeBody = false;
+      field[i][j].food = false;
+      field[i][j].countMove = 0;
     }
+  field[snakeC][snakeR].snakeHead = true;
+  field[foodC][foodR].food = true;
 
-  /* Criar as bordas */
-  for (j = 0; j < row; j++) {
-    field[0][j].left = false;
-    field[column-1][j].right = false;
-  }
-  for (i = 0; i < column; i++) {
-    field[i][0].down = false;
-    field[i][row-1].up = false;
-  }
-
-  fieldGenerator ();
-  doAnWay ();
-  printf ("Labirinto criado\n");
-}
-
-void fieldGenerator () {
-  srand (seed);
-  /* Vou gerar de forma aleatória o labirinto, sem garantia que há solução */
-  int i,j;
-  int p = fieldProbability;; //probabilidade de 1/p de uma parede ser construída
-  for (i = 0; i < column; i++)
-    for (j = 0; j < row; j++) {
-      if (rand() % p == 0) {
-        field[i][j].up = false;
-        if (j < (row - 2))  //essa parte eu uso para garantir que se existe uma parede do canto X que impede ir para X+1, deve existir uma parede no canto X+1 que impede ir para o canto X.
-          field[i][j+1].down = false;
-      }
-      if (rand() % p == 0) {
-        field[i][j].down = false;
-        if (j > 0)
-          field[i][j-1].up = false;
-      }
-      if (rand() % p == 0) {
-        field[i][j].left = false;
-        if (i > 0)
-          field[i-1][j].right = false;
-      }
-      if (rand() % p == 0) {
-        field[i][j].right = false;
-        if (i < (column - 2)) {
-          field[i+1][j].left = false;
-        }
-      }
-    }
-
-    /* Now I will look for close place and make a exit */
-    for (i = 0; i < column; i++)
-      for (j = 0; j < row; j++) {
-        if (field[i][j].up == false && field[i][j].down == false && field[i][j].left == false && field[i][j].right == false) {
-          int open = (rand () % 4) + 1;
-          switch (open) {
-            case UP:
-              if (j < (column - 2)) {
-                field[i][j].up = true;
-                field[i][j+1].down = true;
-              }
-              break;
-            case DOWN:
-              if (j > 0) {
-                field[i][j].down = true;
-                field[i][j-1].up = true;
-              }
-              break;
-            case LEFT:
-              if (i > 0) {
-                field[i][j].left = true;
-                field[i-1][j].right = true;
-              }
-              break;
-            case RIGHT:
-              if (i < (row - 2)) {
-                field[i][j].right = true;
-                field[i+1][j].left = true;
-              }
-              break;
-          }
-        }        
-      }
+  printf ("Campo criado\n");
 }
 
 void destroyfield () {
@@ -515,8 +416,7 @@ void destroyfield () {
     printf ("Fim de jogo com %d passos\n", steps);
 }
 
-void output(int x, int y, float r, float g, float b, char *string)
-{
+void output(int x, int y, float r, float g, float b, char *string) {
   /* Valid font of GLUT
     GLUT_BITMAP_8_BY_13
     GLUT_BITMAP_9_BY_15
@@ -557,134 +457,123 @@ char* itoa(int i, char b[]){
     return b;
 }
 
-/* Guaranteeing an exit */ 
-void doAnWay (void) {
-   srand (seed);
-   // Do something ....
-   int c, r;
-   c = whereIsHeroC ();
-   r = whereIsHeroR ();
-   //Someday I will do this function
-  int pGoUp = 25;
-  int pGoDown = 25;
-  int pGoRight = 25;
-  int pGoLeft = 5;
-  int pionnerR = startR; /* "bandeirante" initial position */
-  int pionnerC = startC;
-
-  //I put a code to count how many time a direction is chosen and limite consecutive choices
-  int countUp = 0;
-  int countDown = 0;
-  int countLeft = 0;
-  int countRight = 0;
-  int blockUp = 5;
-  int blockDown = 5;
-  int blockLeft = 3;
-  int blockRight = 4;
-  bool risingUp = true;
-  bool risingDown = true;
-  bool risingLeft = true;
-  bool risingRight = true;
-
-  int direction;
-  do {
-    int prob = rand () % (pGoUp + pGoDown + pGoRight + pGoLeft);
-    if (prob >= 0 && prob < pGoUp) {
-      if (risingUp) {
-        direction = UP;
-        countUp++;
-        if (countUp == blockUp)
-          risingUp = false;
-      } else {
-        do {
-          prob = rand () % (pGoUp + pGoDown + pGoRight + pGoLeft);
-        } while (prob == UP);
-        countUp--;
-        if (countUp == 0)
-          risingUp = true;
-      }
-    }
-    if (prob >= pGoUp && prob < (pGoUp + pGoDown)) {
-      if (risingDown) {
-        direction = DOWN;
-        countDown++;
-        if (countDown == blockDown)
-          risingDown = false;
-      } else {
-        do {
-          prob = rand () % (pGoUp + pGoDown + pGoRight + pGoLeft);
-        } while (prob == DOWN);
-        countDown--;
-        if (countDown == 0)
-          risingDown = true;
-      }
-    }
-    if (prob >= (pGoUp + pGoDown) && prob < (pGoUp + pGoDown + pGoRight)) {
-      if (risingRight) {
-        direction = RIGHT;
-        countRight++;
-        if (countRight == blockRight)
-          risingRight = false;
-      } else {
-        do {
-          prob = rand () % (pGoUp + pGoDown + pGoRight + pGoLeft);
-        } while (prob == RIGHT);
-        countRight--;
-        if (countRight == 0)
-          risingRight = true;
-      }
-    }
-    if (prob >= (pGoUp + pGoDown + pGoRight) && prob < (pGoUp + pGoDown + pGoRight + pGoLeft)) {
-      if (risingLeft) {
-        direction = LEFT;
-        countLeft++;
-        if (countLeft == blockLeft)
-          risingLeft = false;
-      } else {
-        do {
-          prob = rand () % (pGoUp + pGoDown + pGoRight + pGoLeft);
-        } while (prob == LEFT);
-        countLeft--;
-        if (countLeft == 0)
-          risingLeft = true;
-      }
-    }
-    //After a direction was chosen open a way
-    if (direction == UP && pionnerR < row - 1) {
-      field[pionnerC][pionnerR].up = true;
-      pionnerR++;
-      if (pionnerR <= row - 1)
-        field[pionnerC][pionnerR].down = true;
-    }
-    if (direction == DOWN && pionnerR > 0) {
-      field[pionnerC][pionnerR].down = true;
-      pionnerR--;
-      if (pionnerR > 0)
-        field[pionnerC][pionnerR].up = true;
-    }
-    if (direction == RIGHT && pionnerC < column - 1) {
-      field[pionnerC][pionnerR].right = true;
-      pionnerC++;
-      if (pionnerC <= column - 1)
-        field[pionnerC][pionnerR].left = true;
-    }
-    if (direction == LEFT && pionnerC > 0) {
-      field[pionnerC][pionnerR].left = true;
-      pionnerC--;
-      if (pionnerC > 0)
-        field[pionnerC][pionnerR].right = true;
-    }
-    printf ("bandeirante em %d %d\n", pionnerC, pionnerR);
-  } while (pionnerR != endR || pionnerC != endC);
-}
-
 void timeCount (int value) {
   /* I do not use value, but it mandatory to glutTimerFunc*/
   if (screen == GAME_SCREEN) {
-    timeLeft++;
+    survivalTime++;
 //    if (timeLeft == 0)
 //      screen = GAMEOVER_SCREEN;
+   // go (currentDirection);
     glutPostRedisplay();
-    glutTimerFunc(1000,timeCount,1);
+    glutTimerFunc(1000, timeCount, 1);
   }
+}
+
+void snakeMoviment (int value) {
+  /* I do not use value, but it mandatory to glutTimerFunc*/
+  if (screen == GAME_SCREEN) {
+   // survivalTime++;
+//    if (timeLeft == 0)
+//      screen = GAMEOVER_SCREEN;
+    go (currentDirection);
+    glutPostRedisplay();
+    glutTimerFunc(speed, snakeMoviment, 1);
+  }
+}
+
+void go (int direction) {
+  srand (seed);
+  
+  if ((lastDirection == UP && direction == DOWN) ||
+      (lastDirection == DOWN && direction == UP) ||
+      (lastDirection == LEFT && direction == RIGHT) ||
+      (lastDirection == RIGHT && direction == LEFT)) {
+    go (lastDirection);
+  } else {
+
+  int c, r;
+  c = whereIsSnakeHeadC ();
+  r = whereIsSnakeHeadR ();
+  countMove++;
+
+  if (field[c][r].food == true) {
+    field[c][r].food = false;
+    snakeSize++;
+    foodCount++;
+    int c_, r_;
+    do {
+      c_ = rand () % column;
+      r_ = rand () % row;
+      printf ("col = %d and row = %d\n", c_, r_);
+    } while (field[c_][r_].snakeBody == true || field[c_][r_].snakeHead == true);
+    field[c_][r_].food = true;
+    speedUp--;
+    if (speed > 50 && speedUp == 0) {    
+      speed -= 50;
+      speedUp = 10;
+    }
+  }
+
+  lastDirection = currentDirection; //I need to save the last direction to do not try to come back.
+  switch (direction) {
+    case 27:                                         // tecla Esc (encerra o programa)
+      destroyfield ();
+    	exit(0);
+      break;
+    case UP:
+      if (!doCollision(UP)) {
+          currentDirection = UP;
+          field[c][r].snakeBody = true;
+          field[c][r].countMove = countMove;
+          field[c][r].snakeHead = false;
+          field[c][r+1].snakeHead = true;
+      }
+      break;
+    case DOWN:
+      if (!doCollision(DOWN)) {
+          currentDirection = DOWN;
+          field[c][r].snakeBody = true;
+          field[c][r].countMove = countMove;
+          field[c][r].snakeHead = false;
+          field[c][r-1].snakeHead = true;
+      }
+      break;
+    case LEFT:
+      if (!doCollision(LEFT)) {
+          currentDirection = LEFT;
+          field[c][r].snakeBody = true;
+          field[c][r].countMove = countMove;
+          field[c][r].snakeHead = false;
+          field[c-1][r].snakeHead = true;
+      }
+      break;
+    case RIGHT:
+      if (!doCollision(RIGHT)) {
+          currentDirection = RIGHT;
+          field[c][r].snakeBody = true;
+          field[c][r].countMove = countMove;          
+          field[c][r].snakeHead = false;
+          field[c+1][r].snakeHead = true;
+      }
+      break;
+    break;
+    }
+    cutTail (snakeSize);
+  }
+}
+
+void cutTail (int snakeSize) {
+  int i,j;
+  int cutPoint = countMove - snakeSize;
+  for (i = 0; i < row; i++)
+    for (j = 0; j < column; j++) {
+      if (field[i][j].countMove == cutPoint) {
+        field[i][j].snakeBody = false;
+        printf ("o rabo foi apagado em R %d e C %d\n", j, i);
+      }
+      if (field[i][j].countMove == cutPoint - 1) {
+        field[i][j].snakeBody = false;
+        printf ("o rabo foi apagado em R %d e C %d\n", j, i);
+      }
+    }
 }
